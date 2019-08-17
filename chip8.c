@@ -72,9 +72,22 @@ int main(int argc, char** argv){
         // Read opcode
         uint16_t opcode = (mac.mem[mac.pc] << 8) | mac.mem[mac.pc+1];
         mac.pc = mac.pc + 2;
-    
+        
+        if(mac.pc >= MEMSIZE)
+            mac.pc = 0x200;
+
         // Process instruction from opcode
         
+        // example 6a02 -> nnn = a02 kk = 02 n = 2 x = a y = 0
+
+        uint16_t nnn = opcode & 0x0FFF;
+        uint8_t kk = opcode & 0x00FF;
+        uint8_t n = opcode & 0x000F;
+        uint8_t x = (opcode >> 8) & 0x000F;
+        uint8_t y = (opcode >> 4) & 0x000F;
+
+        uint8_t patata = (opcode >> 12);
+
         
         // Control
 
