@@ -70,11 +70,12 @@ int main(int argc, char** argv){
     while(!quit)
     {
         // Read opcode
-
-
+        uint16_t opcode = (mac.mem[mac.pc] << 8) | mac.mem[mac.pc+1];
+        mac.pc = mac.pc + 2;
+    
         // Process instruction from opcode
         
-
+        
         // Control
 
 
