@@ -1,6 +1,6 @@
 FILES_C = chip8.c
 TARGET = chip8
-CFLAGS = -O -Wall
+CFLAGS = -Wall
 CC = gcc
 
 FILES_O = $(subst .c,.o,$(FILES_C))
