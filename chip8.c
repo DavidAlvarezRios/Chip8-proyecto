@@ -124,18 +124,27 @@ int main(int argc, char** argv){
                 printf("SE V%x, %x", x, kk);
                 if(mac.v[x] == kk)
                     mac.pc = mac.pc + 2;
+                if(mac.pc >= MEMSIZE)
+                    mac.pc = 0x200;
+
                 break;
 
             case 4:
                 printf("SNE V%x, %x", x, kk);
                 if(mac.v[x] != kk)
                     mac.pc = mac.pc + 2;
+
+                if(mac.pc >= MEMSIZE)
+                    mac.pc = 0x200;
                 break;
 
             case 5:
                 printf("SE V%x, V%x", x, y);
                 if(mac.v[x] == mac.v[y])
                     mac.pc = mac.pc + 2;
+
+                if(mac.pc >= MEMSIZE)
+                    mac.pc = 0x200;
                 break;
 
             case 6:
@@ -177,11 +186,10 @@ int main(int argc, char** argv){
                
                     case 4:
                         printf("ADD V%x, V%x", x, y);
-                        uint8_t result = mac.v[x] + mac.v[y];
-
                         //set vf to 1 if overflow 0 otherwise
+                        mac.v[0xF] = (mac.v[x] > mac.v[x] + mac.v[y]);
 
-                        mac.v[x] = result;
+                        mac.v[x] = mac.v[x] + mac.v[y];
                         break;
                     
                     
@@ -198,12 +206,12 @@ int main(int argc, char** argv){
                     case 6:
                         printf("SHR V%x, V%x", x, y);
 
-                        if(mac.v[x] && 0x1)
+                        if(mac.v[x] && 1)
                             mac.v[0xF] = 1;
                         else
                             mac.v[0xF] = 0;
 
-                        mac.v[x] = (mac.v[x] >> 2);
+                        mac.v[x] = (mac.v[x] >> 1);
 
                         break;
                
@@ -215,6 +223,8 @@ int main(int argc, char** argv){
                             mac.v[0xF] = 1;
                         else
                             mac.v[0xF] = 0;
+
+                        mac.v[x] -= mac.v[y];
                         
                         break;
                
@@ -226,7 +236,7 @@ int main(int argc, char** argv){
                         else
                             mac.v[0xF] = 0;
 
-                        mac.v[x] = (mac.v[x] << 2);
+                        mac.v[x] = (mac.v[x] << 1);
 
                         break;
                                               
@@ -238,9 +248,11 @@ int main(int argc, char** argv){
             case 9:
                 printf("SNE V%x, V%x", x, y);
 
-                if(mac.v[x] != mac.v[y])
+                if(mac.v[x] != mac.v[y]){
                     mac.pc = mac.pc + 2;
-
+                    if(mac.pc >= MEMSIZE)
+                        mac.pc = 0x200;
+                }
             case 0XA:
                 printf("LD I, %x", nnn);
                 mac.I = nnn;
@@ -249,6 +261,10 @@ int main(int argc, char** argv){
             case 0xB:
                 printf("JP V0, %x", nnn);
                 mac.pc = mac.v[0] + nnn;
+                /*
+                if(mac.pc >= MEMSIZE)
+                    mac.pc = 0x200;
+                */
                 break;
 
             case 0xC:
@@ -302,15 +318,15 @@ int main(int argc, char** argv){
                     case 0x55:
                         printf("LD I, V%x", x);
                         for(i = 0; i < x; i++){
-                            mac.mem[mac.I] = mac.v[x];
-                            mac.I = mac.I + 1;
+                            mac.mem[mac.I + i] = mac.v[x];
+                            //mac.I = mac.I + 1;
                         }
                         break;
                     case 0x65:
                         printf("LD V%x, I", x);
                         for(i = 0; i < x; i++){
-                            mac.v[x] = mac.mem[mac.I];
-                            mac.I = mac.I + 1;
+                            mac.v[x] = mac.mem[mac.I + i];
+                            //mac.I = mac.I + 1;
                         }
                         break;
                     
