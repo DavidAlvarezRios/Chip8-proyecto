@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <SDL2/SDL.h>
 
 #define MEMSIZE 4096
 
@@ -27,9 +28,9 @@ void init_machine(struct machine_t* machine)
     machine->sp = machine->I = machine->dt = machine->st = 0;
     machine->pc = 0x200;
 
-    memset(machine->mem, 0, MEMSIZE*sizeof(machine->mem[0]));
-    memset(machine->v, 0, 16*sizeof(machine->v[0]));
-    memset(machine->stack, 0, 16*sizeof(machine->stack[0]));
+    memset(machine->mem, 0, MEMSIZE);
+    memset(machine->v, 0, 16);
+    memset(machine->stack, 0, 16);
 
 }
 
@@ -53,6 +54,40 @@ void load_rom(struct machine_t* machine)
 	fclose(fp);
 }
 
+
+
+int main(int argc, char** argv)
+{
+    SDL_Window* win = SDL_CreateWindow("Chip8",
+                                        SDL_WINDOWPOS_CENTERED,
+                                        SDL_WINDOWPOS_CENTERED,
+                                        640, 320,
+                                        SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL);
+
+    SDL_Renderer* rnd = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED);
+
+
+    int quit = 0;
+    SDL_Event ev;
+
+    while(!quit)
+    {
+        SDL_PollEvent(&ev);
+        if(ev.type == SDL_QUIT)
+        {
+            quit = 1;
+            //break;
+        }
+            
+    }
+
+
+    SDL_DestroyRenderer(rnd);
+    SDL_DestroyWindow(win);
+    SDL_Quit();
+
+
+/*
 int main(int argc, char** argv){
 
     struct machine_t mac;
@@ -69,6 +104,8 @@ int main(int argc, char** argv){
         
         if(mac.pc >= MEMSIZE)
             mac.pc = 0x200;
+
+        // mac.pc = (mac.pc + 2) & 0xFFF;
 
         // Process instruction from opcode
         
@@ -261,10 +298,7 @@ int main(int argc, char** argv){
             case 0xB:
                 printf("JP V0, %x", nnn);
                 mac.pc = mac.v[0] + nnn;
-                /*
-                if(mac.pc >= MEMSIZE)
-                    mac.pc = 0x200;
-                */
+                                                                
                 break;
 
             case 0xC:
@@ -346,12 +380,8 @@ int main(int argc, char** argv){
 
     }
     
+    */
     
-    
-    
-    
-    
-    
-    //printf("Hello World \n");
     return 0;
 }
+
