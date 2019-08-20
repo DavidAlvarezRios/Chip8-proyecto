@@ -2,7 +2,7 @@ FILES_C = chip8.c
 TARGET = chip8
 CFLAGS = -Wall -g
 CC = gcc
-CC_SDL = -lSDL `sdl2-config --cflags --libs`
+CC_SDL = `sdl2-config --cflags --libs`
 
 FILES_O = $(subst .c,.o,$(FILES_C))
 
