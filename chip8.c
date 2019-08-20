@@ -58,6 +58,9 @@ void load_rom(struct machine_t* machine)
 
 int main(int argc, char** argv)
 {
+
+    SDL_Init(SDL_INIT_EVERYTHING);
+
     SDL_Window* win = SDL_CreateWindow("Chip8",
                                         SDL_WINDOWPOS_CENTERED,
                                         SDL_WINDOWPOS_CENTERED,
@@ -66,17 +69,31 @@ int main(int argc, char** argv)
 
     SDL_Renderer* rnd = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED);
 
+    SDL_Texture* tex = SDL_CreateTexture(rnd, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, 64, 32);
+
+    int pitch;
+    Uint32* pixels;
+    
+    SDL_LockTexture(tex, NULL, (void **) &pixels, &pitch);
+    //Draw pixels
+    memset(pixels, 0x80, 32*pitch);
+    
+    SDL_UnlockTexture(tex);
 
     int quit = 0;
     SDL_Event ev;
 
     while(!quit)
     {
+
+        SDL_RenderClear(rnd);
+        SDL_RenderCopy(rnd, tex, NULL, NULL);
+        SDL_RenderPresent(rnd);
+
         SDL_WaitEvent(&ev);
         if(ev.type == SDL_QUIT)
         {
             quit = 1;
-            //break;
         }
             
     }
