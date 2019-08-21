@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <SDL2/SDL.h>
 
 #define MEMSIZE 4096
@@ -20,8 +21,19 @@ struct machine_t{
     uint8_t sp;             // Stack Pointer
     uint16_t stack[16];     // The Stack of the processor. 16 subroutines max
 
+    char screen[2048];      //Array to hold screen information. size -> 64 * 32 = 2048
+
 };
 
+void step_machine(struct machine_t* mac);
+
+static void expansion(char* from, Uint32* to)
+{
+    for(int i = 0; i < 2048; i++)
+    {
+        to[i] = (from[i]) ? -1 : 0; // -1 in Uint32 is 0xFFFFFFFF so the pixel is white.
+    }
+}
 
 void init_machine(struct machine_t* machine)
 {
@@ -58,6 +70,19 @@ void load_rom(struct machine_t* machine)
 
 int main(int argc, char** argv)
 {
+    struct machine_t mac;
+    init_machine(&mac);
+    load_rom(&mac);
+
+    
+    //srand(time(NULL));
+    for(int i = 0; i < 2048; i++)
+    {
+        //Rand produces random numbers of 32 bits. With this mask will produce random numbers of 1 bit
+        //mac.screen[i] = (rand() & 1); 
+        mac.screen[i] = 0;
+    }
+    
 
     SDL_Init(SDL_INIT_EVERYTHING);
 
@@ -68,337 +93,353 @@ int main(int argc, char** argv)
                                         SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL);
 
     SDL_Renderer* rnd = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED);
-
     SDL_Texture* tex = SDL_CreateTexture(rnd, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, 64, 32);
+    //Dummy whiteground
+    SDL_Surface* surf = SDL_CreateRGBSurface(0, 64, 32, 32,
+                                                0x00FF0000,
+                                                0x0000FF00,
+                                                0X000000FF,
+                                                0XFF000000);
 
-    int pitch;
-    Uint32* pixels;
+    //int pitch;
+    //Uint32* pixels;
     
-    SDL_LockTexture(tex, NULL, (void **) &pixels, &pitch);
-    //Draw pixels
-    memset(pixels, 0x80, 32*pitch);
+    // Draw pixels
+    //memset(surf->pixels, 0xFF, 32 * surf->pitch);
     
+    SDL_LockTexture(tex, NULL, &surf->pixels, &surf->pitch);
+    expansion(mac.screen, (Uint32 *) surf->pixels);
     SDL_UnlockTexture(tex);
 
-    int quit = 0;
+    int quit = 0; // Flag to shut down the chip8 emulator.
     SDL_Event ev;
+    Uint32 last_delta = 0;
 
     while(!quit)
     {
-
         SDL_RenderClear(rnd);
         SDL_RenderCopy(rnd, tex, NULL, NULL);
         SDL_RenderPresent(rnd);
 
-        SDL_WaitEvent(&ev);
-        if(ev.type == SDL_QUIT)
+        while(SDL_WaitEventTimeout(&ev, 10))
+            switch(ev.type){
+                case SDL_QUIT:
+                    quit = 1;
+                    break;
+            }
+        
+        step_machine(&mac);
+        
+        if(SDL_GetTicks() - last_delta > (1000/60))
         {
-            quit = 1;
-        }
+            SDL_LockTexture(tex, NULL, &surf->pixels, &surf->pitch);
+            expansion(mac.screen, (Uint32 *) surf->pixels);
+            SDL_UnlockTexture(tex);
             
+            SDL_RenderCopy(rnd, tex, NULL, NULL);
+            SDL_RenderPresent(rnd);
+            last_delta = SDL_GetTicks();
+        }
+
     }
-
-
+    
     SDL_DestroyRenderer(rnd);
     SDL_DestroyWindow(win);
-    SDL_Quit();
-
-
-/*
-int main(int argc, char** argv){
-
-    struct machine_t mac;
-    init_machine(&mac);
-    load_rom(&mac);
+    SDL_Quit(); 
     
-    int quit = 0; // Flag to shutdown the chip8
+    return 0;
+}
 
-    while(!quit)
-    {
-        // Read opcode
-        uint16_t opcode = (mac.mem[mac.pc] << 8) | mac.mem[mac.pc+1];
-        mac.pc = mac.pc + 2;
+
+
+void step_machine(struct machine_t* mac)
+{
+
+
+    // Read opcode
+    uint16_t opcode = (mac->mem[mac->pc] << 8) | mac->mem[mac->pc+1];
+
+    mac->pc = (mac->pc + 2) & 0xFFF;
+    // Process instruction from opcode
+    
+    // example 6a02 -> nnn = a02 kk = 02 n = 2 x = a y = 0
+
+    uint16_t nnn = opcode & 0x0FFF;
+    uint8_t kk = opcode & 0x00FF;
+    uint8_t n = opcode & 0x000F;
+    uint8_t x = (opcode >> 8) & 0x000F;
+    uint8_t y = (opcode >> 4) & 0x000F;
+
+    uint8_t patata = (opcode >> 12);
+
+    int i = 0;
+    
+    switch (patata) {
         
-        if(mac.pc >= MEMSIZE)
-            mac.pc = 0x200;
+        case 0:
+            if(opcode == 0x00E0){
+                //printf("CLS");
+            }else if(opcode == 0x00EE){
+                //printf("RET");
+                if(mac->sp > 0){
+                    mac->pc = mac->stack[mac->sp];
+                    mac->sp = mac->sp - 1;
+                }
+            }
 
-        // mac.pc = (mac.pc + 2) & 0xFFF;
-
-        // Process instruction from opcode
+            break;
         
-        // example 6a02 -> nnn = a02 kk = 02 n = 2 x = a y = 0
-
-        uint16_t nnn = opcode & 0x0FFF;
-        uint8_t kk = opcode & 0x00FF;
-        uint8_t n = opcode & 0x000F;
-        uint8_t x = (opcode >> 8) & 0x000F;
-        uint8_t y = (opcode >> 4) & 0x000F;
-
-        uint8_t patata = (opcode >> 12);
-
-        int i = 0;
+        case 1:
+            //printf("JP %x", nnn);
+            mac->pc = nnn;
+            break;
         
-        switch (patata) {
+        case 2:
+            //printf("CALL %x", nnn);
+
+            if(mac->sp < 16){
+                mac->stack[mac->sp] = mac->pc;
+                mac->sp++;
+                mac->pc = nnn;
+            }
             
-            case 0:
-                if(opcode == 0x00E0){
-                    printf("CLS");
-                }else if(opcode == 0x00EE){
-                    printf("RET");
+            break;
 
-                    mac.pc = mac.stack[mac.sp];
-                    mac.sp = mac.sp - 1;
-                    if(mac.sp < 0){
-                        fprintf(stderr, "Stack pointer < 0\n");
-                        exit(1);
+        case 3:
+            //printf("SE V%x, %x", x, kk);
+            if(mac->v[x] == kk)
+                mac->pc = (mac->pc + 2) & 0xFFF;
+
+            break;
+
+        case 4:
+            //printf("SNE V%x, %x", x, kk);
+            if(mac->v[x] != kk)
+                mac->pc = (mac->pc + 2) & 0xFFF;
+
+            break;
+
+        case 5:
+            //printf("SE V%x, V%x", x, y);
+            if(mac->v[x] == mac->v[y])
+                mac->pc = (mac->pc + 2) & 0xFFF;
+
+            break;
+
+        case 6:
+            //printf("LD V%x, %x", x, kk);
+            mac->v[x] = kk;
+            break;
+
+        case 7:
+            //printf("ADD V%x, %x", x, kk);
+            mac->v[x] = mac->v[x] + kk;
+            break;
+
+        case 8:
+            
+            switch (n) {
+                
+                case 0:
+                    //printf("LD V%x, V%x", x, y);
+                    mac->v[x] = mac->v[y];
+                    break;
+
+                case 1:
+                    //printf("OR V%x, V%x", x, y);
+                    mac->v[x] = mac->v[x] | mac->v[y];
+                    break;
+            
+            
+                case 2:
+                    //printf("AND V%x, V%x", x, y);
+                    mac->v[x] = mac->v[x] & mac->v[y];
+                    break;
+            
+            
+                case 3:
+                    //printf("XOR V%x, V%x", x, y);
+                    mac->v[x] = mac->v[x] ^ mac->v[y];
+                    break;
+            
+            
+                case 4:
+                    //printf("ADD V%x, V%x", x, y);
+                    //set vf to 1 if overflow 0 otherwise
+                    mac->v[0xF] = (mac->v[x] > mac->v[x] + mac->v[y]);
+
+                    mac->v[x] = mac->v[x] + mac->v[y];
+                    break;
+                
+                
+                case 5:
+                    //printf("SUB V%x, V%x", x, y);
+
+                    if(mac->v[x] > mac->v[y])
+                        mac->v[0xF] = 1;
+
+                    mac->v[x] = mac->v[x] - mac->v[y];
+                    break;
+            
+
+                case 6:
+                    //printf("SHR V%x, V%x", x, y);
+
+                    if(mac->v[x] && 1)
+                        mac->v[0xF] = 1;
+                    else
+                        mac->v[0xF] = 0;
+
+                    mac->v[x] = (mac->v[x] >> 1);
+
+                    break;
+            
+
+                case 7:
+                    //printf("SUBN V%x, V%x", x, y);
+
+                    if(mac->v[y] > mac->v[x])
+                        mac->v[0xF] = 1;
+                    else
+                        mac->v[0xF] = 0;
+
+                    mac->v[x] -= mac->v[y];
+                    
+                    break;
+            
+                case 0XE:
+                   // printf("SHL V%x, V%x", x, y);
+
+                    if(mac->v[x] && 0x8)
+                        mac->v[0xF] = 1;
+                    else
+                        mac->v[0xF] = 0;
+
+                    mac->v[x] = (mac->v[x] << 1);
+
+                    break;
+                                            
+                                
+            }
+            
+            break;
+            
+        case 9:
+            //printf("SNE V%x, V%x", x, y);
+
+            if(mac->v[x] != mac->v[y]){
+                mac->pc = (mac->pc + 2) & 0xFFF;
+            }
+        case 0XA:
+            //printf("LD I, %x", nnn);
+            mac->I = nnn;
+            break;
+
+        case 0xB:
+            //printf("JP V0, %x", nnn);
+            mac->pc = (mac->v[0] + nnn) & 0xFFF;
+                                                            
+            break;
+
+        case 0xC:
+            //printf("RND V%x, %x", x, kk);
+            mac->v[x] = (rand() % 256) & kk;
+            break;
+
+        case 0xD:
+            /*
+             * Draws a sprite wich is stored in the addres that I points to I + n. The coordinates of the
+             * screen is stored in V[x] and V[y]. If the position in wich the sprite is being drawn exceeds
+             * the height or widh of the screen it will continue drawing in the opposite position of the
+             * screen. The sprites are XORed against the actual values of the screen. If the value changes VF
+             * is set to 1.           
+             */
+
+            //printf("DRW V%x, V%x, %x", x, y, n);
+            
+            for(int j = 0; j < n; j++)
+            {
+                uint8_t sprite = mac->mem[mac->I + j];
+                for(int i = 0; i < 7; i++)
+                {
+                    int px = (mac->v[x] + i) & 63;
+                    int py = (mac->v[y] + j) & 31;
+                    
+                    mac->screen[64 * py + px] = ( sprite & (1 << (7-i)) ) != 0;
+                    
+                }
+                
+            }
+
+            break;
+
+        case 0xE:
+            if( kk == 95 ){
+                //printf("SKP V%x", x);
+            }else if( kk == 0xA1 ){
+                //printf("SKNP V%x", x);
+            }
+
+            break;
+
+        case 0xF:
+            switch (kk) {
+                
+                case 0x07:
+                    //printf("LD V%x, DT", x);
+                    mac->v[x] = mac->dt;
+                    break;
+                case 0x0A:
+                    printf("LD V%x, k", x);
+                    //Stores value of key in Vx
+                    break;
+                case 0x15:
+                    //printf("LD DT, V%x", x);
+                    mac->dt = mac->v[x];
+                    break;
+                case 0x18:
+                    //printf("LD ST, V%x", x);
+                    mac->st = mac->v[x];
+                    break;
+                case 0x1E:
+                    //printf("ADD I, V%x", x);
+                    mac->I = mac->I + mac->v[x];
+                    break;
+                case 0x29:
+                    //printf("LD F, V%x", x);
+                    //TODO
+                    break;
+                case 0x33:
+                    //printf("LD B, V%x", x);
+                    break;
+                case 0x55:
+                    //printf("LD I, V%x", x);
+                    for(i = 0; i < x; i++){
+                        mac->mem[mac->I + i] = mac->v[x];
+                        //mac->I = mac->I + 1;
                     }
-                        
-
-                }
-
-                break;
-            
-            case 1:
-                printf("JP %x", nnn);
-                mac.pc = nnn;
-                break;
-            
-            case 2:
-                printf("CALL %x", nnn);
-                mac.sp = mac.sp + 1;
-                if(mac.sp >= 16){
-                    fprintf(stderr, "Stack Pointer overflow\n");
-                    exit(1);
-                }
-                mac.stack[mac.sp] = mac.pc;
-                mac.pc = nnn;
-                break;
-
-            case 3:
-                printf("SE V%x, %x", x, kk);
-                if(mac.v[x] == kk)
-                    mac.pc = mac.pc + 2;
-                if(mac.pc >= MEMSIZE)
-                    mac.pc = 0x200;
-
-                break;
-
-            case 4:
-                printf("SNE V%x, %x", x, kk);
-                if(mac.v[x] != kk)
-                    mac.pc = mac.pc + 2;
-
-                if(mac.pc >= MEMSIZE)
-                    mac.pc = 0x200;
-                break;
-
-            case 5:
-                printf("SE V%x, V%x", x, y);
-                if(mac.v[x] == mac.v[y])
-                    mac.pc = mac.pc + 2;
-
-                if(mac.pc >= MEMSIZE)
-                    mac.pc = 0x200;
-                break;
-
-            case 6:
-                printf("LD V%x, %x", x, kk);
-                mac.v[x] = kk;
-                break;
-
-            case 7:
-                printf("ADD V%x, %x", x, kk);
-                mac.v[x] = mac.v[x] + kk;
-                break;
-
-            case 8:
+                    break;
+                case 0x65:
+                    //printf("LD V%x, I", x);
+                    for(i = 0; i < x; i++){
+                        mac->v[x] = mac->mem[mac->I + i];
+                        //mac->I = mac->I + 1;
+                    }
+                    break;
                 
-                switch (n) {
-                    
-                    case 0:
-                        printf("LD V%x, V%x", x, y);
-                        mac.v[x] = mac.v[y];
-                        break;
+            }
+            break;
 
-                    case 1:
-                        printf("OR V%x, V%x", x, y);
-                        mac.v[x] = mac.v[x] | mac.v[y];
-                        break;
-               
-               
-                    case 2:
-                        printf("AND V%x, V%x", x, y);
-                        mac.v[x] = mac.v[x] & mac.v[y];
-                        break;
-               
-               
-                    case 3:
-                        printf("XOR V%x, V%x", x, y);
-                        mac.v[x] = mac.v[x] ^ mac.v[y];
-                        break;
-               
-               
-                    case 4:
-                        printf("ADD V%x, V%x", x, y);
-                        //set vf to 1 if overflow 0 otherwise
-                        mac.v[0xF] = (mac.v[x] > mac.v[x] + mac.v[y]);
-
-                        mac.v[x] = mac.v[x] + mac.v[y];
-                        break;
-                    
-                    
-                    case 5:
-                        printf("SUB V%x, V%x", x, y);
-
-                        if(mac.v[x] > mac.v[y])
-                            mac.v[0xF] = 1;
-
-                        mac.v[x] = mac.v[x] - mac.v[y];
-                        break;
-               
-
-                    case 6:
-                        printf("SHR V%x, V%x", x, y);
-
-                        if(mac.v[x] && 1)
-                            mac.v[0xF] = 1;
-                        else
-                            mac.v[0xF] = 0;
-
-                        mac.v[x] = (mac.v[x] >> 1);
-
-                        break;
-               
-
-                    case 7:
-                        printf("SUBN V%x, V%x", x, y);
-
-                        if(mac.v[y] > mac.v[x])
-                            mac.v[0xF] = 1;
-                        else
-                            mac.v[0xF] = 0;
-
-                        mac.v[x] -= mac.v[y];
-                        
-                        break;
-               
-                    case 0XE:
-                        printf("SHL V%x, V%x", x, y);
-
-                        if(mac.v[x] && 0x8)
-                            mac.v[0xF] = 1;
-                        else
-                            mac.v[0xF] = 0;
-
-                        mac.v[x] = (mac.v[x] << 1);
-
-                        break;
-                                              
-                                 
-               }
-                
-                break;
-               
-            case 9:
-                printf("SNE V%x, V%x", x, y);
-
-                if(mac.v[x] != mac.v[y]){
-                    mac.pc = mac.pc + 2;
-                    if(mac.pc >= MEMSIZE)
-                        mac.pc = 0x200;
-                }
-            case 0XA:
-                printf("LD I, %x", nnn);
-                mac.I = nnn;
-                break;
-
-            case 0xB:
-                printf("JP V0, %x", nnn);
-                mac.pc = mac.v[0] + nnn;
-                                                                
-                break;
-
-            case 0xC:
-                printf("RND V%x, %x", x, kk);
-                mac.v[x] = (rand() % 256) + kk;
-                break;
-
-            case 0xD:
-                printf("DRW V%x, V%x, %x", x, y, n);
-                break;
-
-            case 0xE:
-                if( kk == 95 ){
-                    printf("SKP V%x", x);
-                }else if( kk == 0xA1 ){
-                    printf("SKNP V%x", x);
-                }
-
-                break;
-
-            case 0xF:
-                switch (kk) {
-                    
-                    case 0x07:
-                        printf("LD V%x, DT", x);
-                        mac.v[x] = mac.dt;
-                        break;
-                    case 0x0A:
-                        printf("LD V%x, k", x);
-                        //Stores value of key in Vx
-                        break;
-                    case 0x15:
-                        printf("LD DT, V%x", x);
-                        mac.dt = mac.v[x];
-                        break;
-                    case 0x18:
-                        printf("LD ST, V%x", x);
-                        mac.st = mac.v[x];
-                        break;
-                    case 0x1E:
-                        printf("ADD I, V%x", x);
-                        mac.I = mac.I + mac.v[x];
-                        break;
-                    case 0x29:
-                        printf("LD F, V%x", x);
-                        //TODO
-                        break;
-                    case 0x33:
-                        printf("LD B, V%x", x);
-                        break;
-                    case 0x55:
-                        printf("LD I, V%x", x);
-                        for(i = 0; i < x; i++){
-                            mac.mem[mac.I + i] = mac.v[x];
-                            //mac.I = mac.I + 1;
-                        }
-                        break;
-                    case 0x65:
-                        printf("LD V%x, I", x);
-                        for(i = 0; i < x; i++){
-                            mac.v[x] = mac.mem[mac.I + i];
-                            //mac.I = mac.I + 1;
-                        }
-                        break;
-                    
-                }
-                break;
-
-            default:
-                printf("pene");
-                break;
-
-
-        }
-
-        printf("\n");
-        // Control
+        default:
+            //printf("pene");
+            break;
 
 
     }
+
+    //printf("\n");
+    // Control
     
-    */
     
-    return 0;
 }
 
