@@ -407,7 +407,7 @@ void step_machine(struct machine_t* mac)
                     break;
                 case 0x29:
                     //printf("LD F, V%x", x);
-                    //TODO
+                    
                     break;
                 case 0x33:
                     //printf("LD B, V%x", x);
@@ -415,14 +415,14 @@ void step_machine(struct machine_t* mac)
                 case 0x55:
                     //printf("LD I, V%x", x);
                     for(i = 0; i < x; i++){
-                        mac->mem[mac->I + i] = mac->v[x];
+                        mac->mem[mac->I + i] = mac->v[i];
                         //mac->I = mac->I + 1;
                     }
                     break;
                 case 0x65:
                     //printf("LD V%x, I", x);
                     for(i = 0; i < x; i++){
-                        mac->v[x] = mac->mem[mac->I + i];
+                        mac->v[i] = mac->mem[mac->I + i];
                         //mac->I = mac->I + 1;
                     }
                     break;
