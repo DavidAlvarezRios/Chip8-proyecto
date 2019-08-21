@@ -7,6 +7,25 @@
 
 #define MEMSIZE 4096
 
+char hexcodes[] = {
+    0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+    0x20, 0x60, 0x20, 0x20, 0x70, // 1
+    0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+    0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+    0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+    0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+    0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+    0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+    0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+    0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+    0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+    0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+    0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+    0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+    0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+};
+
 struct machine_t{
 
     uint8_t mem[MEMSIZE];   // Memory RAM of the chip
@@ -37,12 +56,14 @@ static void expansion(char* from, Uint32* to)
 
 void init_machine(struct machine_t* machine)
 {
-    machine->sp = machine->I = machine->dt = machine->st = 0;
+    //machine->sp = machine->I = machine->dt = machine->st = 0;
     machine->pc = 0x200;
 
-    memset(machine->mem, 0, MEMSIZE);
-    memset(machine->v, 0, 16);
-    memset(machine->stack, 0, 16);
+    memset(machine, 0x00, sizeof(struct machine_t));
+    //memset(machine->mem, 0, MEMSIZE);
+    //memset(machine->v, 0, 16);
+    //memset(machine->stack, 0, 16);
+    memcpy(machine->mem + 0x50, hexcodes, 80); //16 numeros * 5 filas sprites
 
 }
 
@@ -94,7 +115,6 @@ int main(int argc, char** argv)
 
     SDL_Renderer* rnd = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED);
     SDL_Texture* tex = SDL_CreateTexture(rnd, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, 64, 32);
-    //Dummy whiteground
     SDL_Surface* surf = SDL_CreateRGBSurface(0, 64, 32, 32,
                                                 0x00FF0000,
                                                 0x0000FF00,
@@ -120,13 +140,14 @@ int main(int argc, char** argv)
         SDL_RenderClear(rnd);
         SDL_RenderCopy(rnd, tex, NULL, NULL);
         SDL_RenderPresent(rnd);
-
-        while(SDL_WaitEventTimeout(&ev, 10))
-            switch(ev.type){
+        
+        while (SDL_PollEvent(&ev)) {
+            switch (ev.type) {
                 case SDL_QUIT:
                     quit = 1;
                     break;
             }
+        }
         
         step_machine(&mac);
         
@@ -152,6 +173,7 @@ int main(int argc, char** argv)
 
 
 
+
 void step_machine(struct machine_t* mac)
 {
 
@@ -171,14 +193,13 @@ void step_machine(struct machine_t* mac)
     uint8_t y = (opcode >> 4) & 0x000F;
 
     uint8_t patata = (opcode >> 12);
-
-    int i = 0;
     
     switch (patata) {
         
         case 0:
             if(opcode == 0x00E0){
                 //printf("CLS");
+                memset(mac->screen, 0, 2048);
             }else if(opcode == 0x00EE){
                 //printf("RET");
                 if(mac->sp > 0){
@@ -200,8 +221,8 @@ void step_machine(struct machine_t* mac)
             if(mac->sp < 16){
                 mac->stack[mac->sp] = mac->pc;
                 mac->sp++;
-                mac->pc = nnn;
             }
+            mac->pc = nnn;
             
             break;
 
@@ -233,93 +254,99 @@ void step_machine(struct machine_t* mac)
 
         case 7:
             //printf("ADD V%x, %x", x, kk);
-            mac->v[x] = mac->v[x] + kk;
+            mac->v[x] = (mac->v[x] + kk) & 0xFF;
             break;
 
         case 8:
             
             switch (n) {
-                
                 case 0:
-                    //printf("LD V%x, V%x", x, y);
+                    /*
+                     * 8XY0: LD X, Y
+                     * Set V[x] = V[y]
+                     */
                     mac->v[x] = mac->v[y];
                     break;
 
                 case 1:
-                    //printf("OR V%x, V%x", x, y);
-                    mac->v[x] = mac->v[x] | mac->v[y];
+                    /*
+                     * 8XY1: OR X, Y
+                     * Set V[x] to V[x] OR V[y].
+                     */
+                    mac->v[x] |= mac->v[y];
                     break;
-            
-            
+
                 case 2:
-                    //printf("AND V%x, V%x", x, y);
-                    mac->v[x] = mac->v[x] & mac->v[y];
+                    /*
+                     * 8XY2: AND X, Y
+                     * Set V[x] to V[x] AND V[y].
+                     */
+                    mac->v[x] &= mac->v[y];
                     break;
-            
-            
+
                 case 3:
-                    //printf("XOR V%x, V%x", x, y);
-                    mac->v[x] = mac->v[x] ^ mac->v[y];
+                    /*
+                     * 8XY3: XOR X, Y
+                     * Set V[x] to V[x] XOR V[y]
+                     */
+                    mac->v[x] ^= mac->v[y];
                     break;
-            
-            
+
                 case 4:
-                    //printf("ADD V%x, V%x", x, y);
-                    //set vf to 1 if overflow 0 otherwise
-                    mac->v[0xF] = (mac->v[x] > mac->v[x] + mac->v[y]);
-
-                    mac->v[x] = mac->v[x] + mac->v[y];
+                    /*
+                     * 8XY4: ADD X, Y
+                     * Add V[y] to V[x]. V[15] is used as carry flag: if
+                     * there is a carry, V[15] must be set to 1, else to 0.
+                     */
+                    mac->v[0xf] = (mac->v[x] > mac->v[x] + mac->v[y]);
+                    mac->v[x] += mac->v[y];
                     break;
-                
-                
+
                 case 5:
-                    //printf("SUB V%x, V%x", x, y);
-
-                    if(mac->v[x] > mac->v[y])
-                        mac->v[0xF] = 1;
-
-                    mac->v[x] = mac->v[x] - mac->v[y];
+                    /*
+                     * 8XY5: SUB X, Y
+                     * Substract V[y] from V[x]. V[15] is used as borrow flag:
+                     * if there is a borrow, V[15] must be set to 0, else
+                     * to 1. Which in practice is easier to check as if
+                     * V[x] is greater than V[y].
+                     */
+                    mac->v[0xF] = (mac->v[x] > mac->v[y]);
+                    mac->v[x] -= mac->v[y];
                     break;
-            
 
                 case 6:
-                    //printf("SHR V%x, V%x", x, y);
-
-                    if(mac->v[x] && 1)
-                        mac->v[0xF] = 1;
-                    else
-                        mac->v[0xF] = 0;
-
-                    mac->v[x] = (mac->v[x] >> 1);
-
+                    /*
+                     * 8X06: SHR X
+                     * Shifts right V[x]. Least significant bit from V[x]
+                     * before shifting will be moved to V[15]. Thus, V[15]
+                     * will be set to 1 if V[x] was odd before shifting.
+                     */
+                    mac->v[0xF] = (mac->v[x] & 1);
+                    mac->v[x] >>= 1;
                     break;
-            
 
                 case 7:
-                    //printf("SUBN V%x, V%x", x, y);
-
-                    if(mac->v[y] > mac->v[x])
-                        mac->v[0xF] = 1;
-                    else
-                        mac->v[0xF] = 0;
-
-                    mac->v[x] -= mac->v[y];
-                    
+                    /*
+                     * 8XY7: SUBN X, Y
+                     * Substract V[x] from V[y] and store the result in V[x].
+                     * V[15] is used as a borrow flag in the same sense than
+                     * SUB X, Y did: V[15] is set to 0 if there is borrow,
+                     * else to 1. Which is easier to check as if V[y] is
+                     * greater than V[x].
+                     */
+                    mac->v[0xF] = (mac->v[y] > mac->v[x]);
+                    mac->v[x] = mac->v[y] - mac->v[x];
                     break;
-            
-                case 0XE:
-                   // printf("SHL V%x, V%x", x, y);
 
-                    if(mac->v[x] && 0x8)
-                        mac->v[0xF] = 1;
-                    else
-                        mac->v[0xF] = 0;
-
-                    mac->v[x] = (mac->v[x] << 1);
-
+                case 0xE:
+                    /*
+                     * 8X0E: SHL X
+                     * Shifts left V[x]. Most significant bit from V[x] before
+                     * shifting will be moved to V[15].
+                     */
+                    mac->v[0xF] = ((mac->v[x] & 0x80) != 0);
+                    mac->v[x] <<= 1;
                     break;
-                                            
-                                
             }
             
             break;
@@ -343,7 +370,7 @@ void step_machine(struct machine_t* mac)
 
         case 0xC:
             //printf("RND V%x, %x", x, kk);
-            mac->v[x] = (rand() % 256) & kk;
+            mac->v[x] = rand() & kk;
             break;
 
         case 0xD:
@@ -356,16 +383,21 @@ void step_machine(struct machine_t* mac)
              */
 
             //printf("DRW V%x, V%x, %x", x, y, n);
-            
+            mac->v[0xF] = 0;
             for(int j = 0; j < n; j++)
             {
                 uint8_t sprite = mac->mem[mac->I + j];
-                for(int i = 0; i < 7; i++)
+                for(int i = 0; i < 8; i++)
                 {
                     int px = (mac->v[x] + i) & 63;
                     int py = (mac->v[y] + j) & 31;
+
+                    int pos = 64 * py + px;
+                    int pixel = (sprite & (1 << (7-i))) != 0;
+
+                    mac->v[0xF] = (mac->screen[pos] & pixel);
                     
-                    mac->screen[64 * py + px] = ( sprite & (1 << (7-i)) ) != 0;
+                    mac->screen[pos] ^= pixel;
                     
                 }
                 
@@ -407,24 +439,26 @@ void step_machine(struct machine_t* mac)
                     break;
                 case 0x29:
                     //printf("LD F, V%x", x);
-                    
+                    mac->I = 0x50 + (mac->v[x] & 0xF) * 5; // 5 de 5 filas
                     break;
                 case 0x33:
                     //printf("LD B, V%x", x);
+                    //Hundreds digits in I,  tens in I+1 and ones I+2
+
+                    mac->mem[mac->I + 2] = mac->v[x] % 10;
+                    mac->mem[mac->I + 1] = (mac->v[x] / 10) % 10;
+                    mac->mem[mac->I] = (mac->v[x] / 100);
                     break;
                 case 0x55:
                     //printf("LD I, V%x", x);
-                    for(i = 0; i < x; i++){
-                        mac->mem[mac->I + i] = mac->v[i];
-                        //mac->I = mac->I + 1;
-                    }
+                    for(int i = 0; i <= x; i++)
+                        mac->mem[mac->I + i] = mac->v[i];     
                     break;
                 case 0x65:
                     //printf("LD V%x, I", x);
-                    for(i = 0; i < x; i++){
+                    for(int i = 0; i <= x; i++)
                         mac->v[i] = mac->mem[mac->I + i];
-                        //mac->I = mac->I + 1;
-                    }
+                        
                     break;
                 
             }
@@ -442,4 +476,3 @@ void step_machine(struct machine_t* mac)
     
     
 }
-
