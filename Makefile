@@ -1,6 +1,6 @@
 FILES_C = chip8.c
 TARGET = chip8
-CFLAGS = -Wall -g -O0
+CFLAGS = -Wall -O2
 CC = gcc
 CC_SDL = `sdl2-config --cflags --libs`
 

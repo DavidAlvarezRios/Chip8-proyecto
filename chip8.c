@@ -44,7 +44,7 @@ struct machine_t{
 
 };
 
-void step_machine(struct machine_t* mac);
+
 
 static void expansion(char* from, Uint32* to)
 {
@@ -56,14 +56,9 @@ static void expansion(char* from, Uint32* to)
 
 void init_machine(struct machine_t* machine)
 {
-    //machine->sp = machine->I = machine->dt = machine->st = 0;
-    machine->pc = 0x200;
-
     memset(machine, 0x00, sizeof(struct machine_t));
-    //memset(machine->mem, 0, MEMSIZE);
-    //memset(machine->v, 0, 16);
-    //memset(machine->stack, 0, 16);
     memcpy(machine->mem + 0x50, hexcodes, 80); //16 numeros * 5 filas sprites
+    machine->pc = 0x200;
 
 }
 
@@ -86,93 +81,6 @@ void load_rom(struct machine_t* machine)
     fread(machine->mem + 0x200, length, 1, fp);
 	fclose(fp);
 }
-
-
-
-int main(int argc, char** argv)
-{
-    struct machine_t mac;
-    init_machine(&mac);
-    load_rom(&mac);
-
-    
-    //srand(time(NULL));
-    for(int i = 0; i < 2048; i++)
-    {
-        //Rand produces random numbers of 32 bits. With this mask will produce random numbers of 1 bit
-        //mac.screen[i] = (rand() & 1); 
-        mac.screen[i] = 0;
-    }
-    
-
-    SDL_Init(SDL_INIT_EVERYTHING);
-
-    SDL_Window* win = SDL_CreateWindow("Chip8",
-                                        SDL_WINDOWPOS_CENTERED,
-                                        SDL_WINDOWPOS_CENTERED,
-                                        640, 320,
-                                        SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL);
-
-    SDL_Renderer* rnd = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED);
-    SDL_Texture* tex = SDL_CreateTexture(rnd, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, 64, 32);
-    SDL_Surface* surf = SDL_CreateRGBSurface(0, 64, 32, 32,
-                                                0x00FF0000,
-                                                0x0000FF00,
-                                                0X000000FF,
-                                                0XFF000000);
-
-    //int pitch;
-    //Uint32* pixels;
-    
-    // Draw pixels
-    //memset(surf->pixels, 0xFF, 32 * surf->pitch);
-    
-    SDL_LockTexture(tex, NULL, &surf->pixels, &surf->pitch);
-    expansion(mac.screen, (Uint32 *) surf->pixels);
-    SDL_UnlockTexture(tex);
-
-    int quit = 0; // Flag to shut down the chip8 emulator.
-    SDL_Event ev;
-    Uint32 last_delta = 0;
-
-    while(!quit)
-    {
-        SDL_RenderClear(rnd);
-        SDL_RenderCopy(rnd, tex, NULL, NULL);
-        SDL_RenderPresent(rnd);
-        
-        while (SDL_PollEvent(&ev)) {
-            switch (ev.type) {
-                case SDL_QUIT:
-                    quit = 1;
-                    break;
-            }
-        }
-        
-        step_machine(&mac);
-        
-        if(SDL_GetTicks() - last_delta > (1000/60))
-        {
-            SDL_LockTexture(tex, NULL, &surf->pixels, &surf->pitch);
-            expansion(mac.screen, (Uint32 *) surf->pixels);
-            SDL_UnlockTexture(tex);
-            
-            SDL_RenderCopy(rnd, tex, NULL, NULL);
-            SDL_RenderPresent(rnd);
-            last_delta = SDL_GetTicks();
-        }
-
-    }
-    
-    SDL_DestroyRenderer(rnd);
-    SDL_DestroyWindow(win);
-    SDL_Quit(); 
-    
-    return 0;
-}
-
-
-
 
 void step_machine(struct machine_t* mac)
 {
@@ -475,4 +383,82 @@ void step_machine(struct machine_t* mac)
     // Control
     
     
+}
+
+int main(int argc, char** argv)
+{
+
+    SDL_Window* win;
+    SDL_Renderer* rnd;
+    SDL_Texture* tex;
+    SDL_Surface* surf;
+    SDL_Event ev;
+    Uint32 last_delta = 0;
+    struct machine_t mac;
+    int quit = 0; // Flag to shut down the chip8 emulator.
+    
+    init_machine(&mac);
+    load_rom(&mac);
+
+    srand(time(NULL));
+    for(int i = 0; i < 2048; i++)
+    {
+        //Rand produces random numbers of 32 bits. With this mask will produce random numbers of 1 bit
+        //mac.screen[i] = (rand() & 1); 
+        mac.screen[i] = 0;
+    }
+    
+    SDL_Init(SDL_INIT_EVERYTHING);
+
+    win = SDL_CreateWindow("Chip8",
+                            SDL_WINDOWPOS_CENTERED,
+                            SDL_WINDOWPOS_CENTERED,
+                            640, 320,
+                            SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL);
+
+    rnd = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED);
+    tex = SDL_CreateTexture(rnd, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, 64, 32);
+    surf = SDL_CreateRGBSurface(0, 64, 32, 32,
+                                    0x00FF0000,
+                                    0x0000FF00,
+                                    0X000000FF,
+                                    0XFF000000);
+
+    
+    SDL_LockTexture(tex, NULL, &surf->pixels, &surf->pitch);
+    expansion(mac.screen, (Uint32 *) surf->pixels);
+    SDL_UnlockTexture(tex);
+
+    while(!quit)
+    {
+        
+        while (SDL_PollEvent(&ev)) {
+            switch (ev.type) {
+                case SDL_QUIT:
+                    quit = 1;
+                    break;
+            }
+        }
+        
+        step_machine(&mac);
+        
+        if(SDL_GetTicks() - last_delta > (1000/60))
+        {
+            SDL_LockTexture(tex, NULL, &surf->pixels, &surf->pitch);
+            expansion(mac.screen, (Uint32 *) surf->pixels);
+            SDL_UnlockTexture(tex);
+            
+            SDL_RenderCopy(rnd, tex, NULL, NULL);
+            SDL_RenderPresent(rnd);
+            last_delta = SDL_GetTicks();
+        }
+
+    }
+    
+    SDL_DestroyTexture(tex);
+    SDL_DestroyRenderer(rnd);
+    SDL_DestroyWindow(win);
+    SDL_Quit(); 
+    
+    return 0;
 }
