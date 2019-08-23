@@ -26,6 +26,25 @@ char hexcodes[] = {
     0xF0, 0x80, 0xF0, 0x80, 0x80  // F
 };
 
+char keys[] = {
+    SDL_SCANCODE_X, //0
+    SDL_SCANCODE_1, //1
+    SDL_SCANCODE_2, //2
+    SDL_SCANCODE_3, //3
+    SDL_SCANCODE_Q, //4
+    SDL_SCANCODE_W, //5
+    SDL_SCANCODE_E, //6
+    SDL_SCANCODE_A, //7
+    SDL_SCANCODE_S, //8
+    SDL_SCANCODE_D, //9
+    SDL_SCANCODE_Z, //A
+    SDL_SCANCODE_C, //B
+    SDL_SCANCODE_4, //C
+    SDL_SCANCODE_R, //D
+    SDL_SCANCODE_F, //E
+    SDL_SCANCODE_V  //F
+};
+
 struct machine_t{
 
     uint8_t mem[MEMSIZE];   // Memory RAM of the chip
@@ -41,10 +60,17 @@ struct machine_t{
     uint16_t stack[16];     // The Stack of the processor. 16 subroutines max
 
     char screen[2048];      //Array to hold screen information. size -> 64 * 32 = 2048
+    char wait_key;
 
 };
 
+static int is_key_down(char key){
 
+    const Uint8* sdlkeys = SDL_GetKeyboardState(NULL);
+    Uint8 real_key = keys[(int) key];
+    return sdlkeys[real_key];
+
+}
 
 static void expansion(char* from, Uint32* to)
 {
@@ -59,6 +85,7 @@ void init_machine(struct machine_t* machine)
     memset(machine, 0x00, sizeof(struct machine_t));
     memcpy(machine->mem + 0x50, hexcodes, 80); //16 numeros * 5 filas sprites
     machine->pc = 0x200;
+    machine->wait_key = -1;
 
 }
 
@@ -317,9 +344,13 @@ void step_machine(struct machine_t* mac)
 
         case 0xE:
             if( kk == 95 ){
-                printf("SKP V%x", x);
+                //printf("SKP V%x", x);
+                if(is_key_down(mac->v[x]))
+                    mac->pc = (mac->pc + 2) & 0xFF;
             }else if( kk == 0xA1 ){
-                printf("SKNP V%x", x);
+                //printf("SKNP V%x", x);
+                if(!is_key_down(mac->v[x]))
+                    mac->pc = (mac->pc + 2) & 0xFF;
             }
 
             break;
@@ -332,8 +363,9 @@ void step_machine(struct machine_t* mac)
                     mac->v[x] = mac->dt;
                     break;
                 case 0x0A:
-                    printf("LD V%x, k", x);
+                    //printf("LD V%x, k", x);
                     //Stores value of key in Vx
+                    mac->wait_key = x;
                     break;
                 case 0x15:
                     //printf("LD DT, V%x", x);
@@ -437,7 +469,17 @@ int main(int argc, char** argv)
         }
 
         if(SDL_GetTicks() - cycles > 1){
-            step_machine(&mac);
+            if(mac.wait_key == -1){
+                step_machine(&mac);
+            }else{
+                for(int key = 0; key <= 0xF; key++){
+                    if(is_key_down(mac.v[key])){
+                        mac.v[(int) mac.wait_key] = key;
+                        mac.wait_key = -1;
+                        break;
+                    }
+                }
+            }
             cycles = SDL_GetTicks();
         }
         
