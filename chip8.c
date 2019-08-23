@@ -64,12 +64,12 @@ struct machine_t{
 
 };
 
-static int is_key_down(char key){
-
-    const Uint8* sdlkeys = SDL_GetKeyboardState(NULL);
+static int
+is_key_down(char key)
+{
+    const Uint8* sdl_keys = SDL_GetKeyboardState(NULL);
     Uint8 real_key = keys[(int) key];
-    return sdlkeys[real_key];
-
+    return sdl_keys[real_key];
 }
 
 static void expansion(char* from, Uint32* to)
@@ -113,23 +113,19 @@ void step_machine(struct machine_t* mac)
 {
 
 
-    // Read opcode
-    uint16_t opcode = (mac->mem[mac->pc] << 8) | mac->mem[mac->pc+1];
-
+    uint16_t opcode = (mac->mem[mac->pc] << 8) | mac->mem[mac->pc + 1];
     mac->pc = (mac->pc + 2) & 0xFFF;
-    // Process instruction from opcode
-    if(mac->pc > MEMSIZE || mac->pc < 0x200)    mac->pc = 0x200;
-    //printf("%x\n", mac->pc);
-    // example 6a02 -> nnn = a02 kk = 02 n = 2 x = a y = 0
-
+    //if(mac->pc == 0)    mac->pc = 0x200;
+    //printf("%02x", opcode);
+    // Extract bit nibbles from the opcode
     uint16_t nnn = opcode & 0x0FFF;
-    uint8_t kk = opcode & 0x00FF;
-    uint8_t n = opcode & 0x000F;
-    uint8_t x = (opcode >> 8) & 0x000F;
-    uint8_t y = (opcode >> 4) & 0x000F;
-
+    uint8_t kk = opcode & 0xFF;
+    uint8_t n = opcode & 0xF;
+    uint8_t x = (opcode >> 8) & 0xF;
+    uint8_t y = (opcode >> 4) & 0xF;
     uint8_t patata = (opcode >> 12);
-    
+
+    // infernal switch case! (sorry for all the heart attacks here u_u)
     switch (patata) {
         
         case 0:
@@ -140,8 +136,7 @@ void step_machine(struct machine_t* mac)
                 //printf("RET");
                 if(mac->sp > 0){
                     //mac->sp = mac->sp - 1;
-                    mac->pc = mac->stack[--mac->sp];
-                    
+                    mac->pc = mac->stack[--mac->sp];     
                 }
             }
 
@@ -194,98 +189,50 @@ void step_machine(struct machine_t* mac)
             mac->v[x] = (mac->v[x] + kk) & 0xFF;
             break;
 
-        case 8:
-            
+        case 8:     
             switch (n) {
-                case 0:
-                    /*
-                     * 8XY0: LD X, Y
-                     * Set V[x] = V[y]
-                     */
+                 case 0:
+                    // ld x, y: v[x] = v[y]
                     mac->v[x] = mac->v[y];
                     break;
-
                 case 1:
-                    /*
-                     * 8XY1: OR X, Y
-                     * Set V[x] to V[x] OR V[y].
-                     */
+                    // or x, y: v[x] = v[x] | v[y];
                     mac->v[x] |= mac->v[y];
                     break;
-
                 case 2:
-                    /*
-                     * 8XY2: AND X, Y
-                     * Set V[x] to V[x] AND V[y].
-                     */
+                    // and x, y: v[x] = v[x] & v[y]
                     mac->v[x] &= mac->v[y];
                     break;
-
                 case 3:
-                    /*
-                     * 8XY3: XOR X, Y
-                     * Set V[x] to V[x] XOR V[y]
-                     */
+                    // xor x, y: v[x] = v[x] ^ v[y]
                     mac->v[x] ^= mac->v[y];
                     break;
-
                 case 4:
-                    /*
-                     * 8XY4: ADD X, Y
-                     * Add V[y] to V[x]. V[15] is used as carry flag: if
-                     * there is a carry, V[15] must be set to 1, else to 0.
-                     */
+                    // add x, y: v[x] += v[y]
                     mac->v[0xf] = (mac->v[x] > mac->v[x] + mac->v[y]);
                     mac->v[x] += mac->v[y];
                     break;
-
                 case 5:
-                    /*
-                     * 8XY5: SUB X, Y
-                     * Substract V[y] from V[x]. V[15] is used as borrow flag:
-                     * if there is a borrow, V[15] must be set to 0, else
-                     * to 1. Which in practice is easier to check as if
-                     * V[x] is greater than V[y].
-                     */
+                    // SUB x, y: V[x] -= V[y]
                     mac->v[0xF] = (mac->v[x] > mac->v[y]);
                     mac->v[x] -= mac->v[y];
                     break;
-
                 case 6:
-                    /*
-                     * 8X06: SHR X
-                     * Shifts right V[x]. Least significant bit from V[x]
-                     * before shifting will be moved to V[15]. Thus, V[15]
-                     * will be set to 1 if V[x] was odd before shifting.
-                     */
+                    // SHR x : V[x] = V[x] >> 1
                     mac->v[0xF] = (mac->v[x] & 1);
                     mac->v[x] >>= 1;
                     break;
-
                 case 7:
-                    /*
-                     * 8XY7: SUBN X, Y
-                     * Substract V[x] from V[y] and store the result in V[x].
-                     * V[15] is used as a borrow flag in the same sense than
-                     * SUB X, Y did: V[15] is set to 0 if there is borrow,
-                     * else to 1. Which is easier to check as if V[y] is
-                     * greater than V[x].
-                     */
+                    // SUBN x, y: V[x] = V[y] - V[x]
                     mac->v[0xF] = (mac->v[y] > mac->v[x]);
                     mac->v[x] = mac->v[y] - mac->v[x];
                     break;
-
                 case 0xE:
-                    /*
-                     * 8X0E: SHL X
-                     * Shifts left V[x]. Most significant bit from V[x] before
-                     * shifting will be moved to V[15].
-                     */
+                    // SHL x : V[x] = V[x] << 1
                     mac->v[0xF] = ((mac->v[x] & 0x80) != 0);
                     mac->v[x] <<= 1;
                     break;
             }
-            
             break;
             
         case 9:
@@ -332,7 +279,7 @@ void step_machine(struct machine_t* mac)
                     int pos = 64 * py + px;
                     int pixel = (sprite & (1 << (7-i))) != 0;
 
-                    mac->v[0xF] = (mac->screen[pos] & pixel);
+                    mac->v[0xF] |= (mac->screen[pos] & pixel);
                     
                     mac->screen[pos] ^= pixel;
                     
@@ -343,14 +290,14 @@ void step_machine(struct machine_t* mac)
             break;
 
         case 0xE:
-            if( kk == 95 ){
+            if( kk == 0x9E ){
                 //printf("SKP V%x", x);
                 if(is_key_down(mac->v[x]))
-                    mac->pc = (mac->pc + 2) & 0xFF;
+                    mac->pc = (mac->pc + 2) & 0xFFF;
             }else if( kk == 0xA1 ){
                 //printf("SKNP V%x", x);
                 if(!is_key_down(mac->v[x]))
-                    mac->pc = (mac->pc + 2) & 0xFF;
+                    mac->pc = (mac->pc + 2) & 0xFFF;
             }
 
             break;
@@ -405,10 +352,6 @@ void step_machine(struct machine_t* mac)
             }
             break;
 
-        default:
-            //printf("pene");
-            break;
-
 
     }
 
@@ -427,7 +370,7 @@ int main(int argc, char** argv)
     SDL_Surface* surf;
     SDL_Event ev;
     Uint32 last_delta = 0;
-    Uint32 cycles = 0;
+    int cycles = 0;
     struct machine_t mac;
     int quit = 0; // Flag to shut down the chip8 emulator.
     
@@ -471,6 +414,7 @@ int main(int argc, char** argv)
         if(SDL_GetTicks() - cycles > 1){
             if(mac.wait_key == -1){
                 step_machine(&mac);
+            
             }else{
                 for(int key = 0; key <= 0xF; key++){
                     if(is_key_down(mac.v[key])){
