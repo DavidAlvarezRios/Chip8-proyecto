@@ -91,7 +91,8 @@ void step_machine(struct machine_t* mac)
 
     mac->pc = (mac->pc + 2) & 0xFFF;
     // Process instruction from opcode
-    
+    if(mac->pc > MEMSIZE || mac->pc < 0x200)    mac->pc = 0x200;
+    //printf("%x\n", mac->pc);
     // example 6a02 -> nnn = a02 kk = 02 n = 2 x = a y = 0
 
     uint16_t nnn = opcode & 0x0FFF;
@@ -111,8 +112,9 @@ void step_machine(struct machine_t* mac)
             }else if(opcode == 0x00EE){
                 //printf("RET");
                 if(mac->sp > 0){
-                    mac->pc = mac->stack[mac->sp];
-                    mac->sp = mac->sp - 1;
+                    //mac->sp = mac->sp - 1;
+                    mac->pc = mac->stack[--mac->sp];
+                    
                 }
             }
 
@@ -127,8 +129,8 @@ void step_machine(struct machine_t* mac)
             //printf("CALL %x", nnn);
 
             if(mac->sp < 16){
-                mac->stack[mac->sp] = mac->pc;
-                mac->sp++;
+                //mac->sp++;
+                mac->stack[mac->sp++] = mac->pc;
             }
             mac->pc = nnn;
             
@@ -315,9 +317,9 @@ void step_machine(struct machine_t* mac)
 
         case 0xE:
             if( kk == 95 ){
-                //printf("SKP V%x", x);
+                printf("SKP V%x", x);
             }else if( kk == 0xA1 ){
-                //printf("SKNP V%x", x);
+                printf("SKNP V%x", x);
             }
 
             break;
@@ -352,7 +354,6 @@ void step_machine(struct machine_t* mac)
                 case 0x33:
                     //printf("LD B, V%x", x);
                     //Hundreds digits in I,  tens in I+1 and ones I+2
-
                     mac->mem[mac->I + 2] = mac->v[x] % 10;
                     mac->mem[mac->I + 1] = (mac->v[x] / 10) % 10;
                     mac->mem[mac->I] = (mac->v[x] / 100);
@@ -394,6 +395,7 @@ int main(int argc, char** argv)
     SDL_Surface* surf;
     SDL_Event ev;
     Uint32 last_delta = 0;
+    Uint32 cycles = 0;
     struct machine_t mac;
     int quit = 0; // Flag to shut down the chip8 emulator.
     
@@ -401,12 +403,6 @@ int main(int argc, char** argv)
     load_rom(&mac);
 
     srand(time(NULL));
-    for(int i = 0; i < 2048; i++)
-    {
-        //Rand produces random numbers of 32 bits. With this mask will produce random numbers of 1 bit
-        //mac.screen[i] = (rand() & 1); 
-        mac.screen[i] = 0;
-    }
     
     SDL_Init(SDL_INIT_EVERYTHING);
 
@@ -439,11 +435,17 @@ int main(int argc, char** argv)
                     break;
             }
         }
-        
-        step_machine(&mac);
+
+        if(SDL_GetTicks() - cycles > 1){
+            step_machine(&mac);
+            cycles = SDL_GetTicks();
+        }
         
         if(SDL_GetTicks() - last_delta > (1000/60))
         {
+            if(mac.dt) mac.dt--;
+            if(mac.st) mac.st--; 
+
             SDL_LockTexture(tex, NULL, &surf->pixels, &surf->pitch);
             expansion(mac.screen, (Uint32 *) surf->pixels);
             SDL_UnlockTexture(tex);
